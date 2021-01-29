@@ -12,5 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from .asr_dataset_tpu import ASRTFRecordDatasetKerasTPU
 from .asr_dataset import ASRTFRecordDatasetKeras, ASRSliceDatasetKeras
-__all__ = ['ASRTFRecordDatasetKeras', 'ASRSliceDatasetKeras']
+
+__all__ = ['ASRTFRecordDatasetKeras', 'ASRSliceDatasetKeras', 'ASRTFRecordDatasetKerasTPU']

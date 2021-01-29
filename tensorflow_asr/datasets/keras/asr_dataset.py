@@ -36,6 +36,7 @@ class ASRDatasetKeras(ASRDataset):
             dataset = dataset.shuffle(self.buffer_size, reshuffle_each_iteration=True)
 
         # PADDED BATCH the dataset
+
         dataset = dataset.padded_batch(
             batch_size=batch_size,
             padded_shapes=(

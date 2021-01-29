@@ -153,7 +153,7 @@ class TransducerJoint(tf.keras.Model):
         super(TransducerJoint, self).__init__(name=name, **kwargs)
 
         activation = activation.lower()
-        if activation == "linear": self.activation = tf.keras.activation.linear
+        if activation == "linear": self.activation = tf.keras.activations.linear
         elif activation == "relu": self.activation = tf.nn.relu
         elif activation == "tanh": self.activation = tf.nn.tanh
         else: raise ValueError("activation must be either 'linear', 'relu' or 'tanh'")
