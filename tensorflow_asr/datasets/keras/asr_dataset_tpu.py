@@ -82,19 +82,6 @@ def get_max_len(cache_path,
     return max_input_len, max_label_len, max_prediction_len
 
 
-def write_tfrecord_features(shard_path, audio_token_id_pairs):
-    with tf.io.TFRecordWriter(shard_path, options='ZLIB') as out:
-        for audio_16k_normal, token_ids in tqdm(audio_token_id_pairs):
-            feature = {
-                "audio_16k_normal": float_feature(audio_16k_normal),
-                "token_ids": int64_feature(token_ids)
-            }
-
-            example = tf.train.Example(features=tf.train.Features(feature=feature))
-            out.write(example.SerializeToString())
-    print(f"\nCreated {shard_path}")
-
-
 class ASRTFRecordDatasetKerasTPU(ASRTFRecordDatasetKeras):
     """ Keras Dataset for ASR using TFRecords """
 
@@ -131,13 +118,27 @@ class ASRTFRecordDatasetKerasTPU(ASRTFRecordDatasetKeras):
         audio_token_id_pairs = []
 
         for audio, _, transcript in tqdm(entries, desc="reading entries"):
-            signal = read_raw_audio(audio, self.speech_featurizer.sample_rate)
+            # signal = read_raw_audio(audio, self.speech_featurizer.sample_rate)
 
             label = self.text_featurizer.extract(transcript)
 
-            audio_token_id_pairs.append([signal, label])
+            audio_token_id_pairs.append([audio, label])
 
         return audio_token_id_pairs
+
+    def write_tfrecord_features(self, shard_path, audio_token_id_pairs):
+        with tf.io.TFRecordWriter(shard_path, options='ZLIB') as out:
+            for audio_path, token_ids in tqdm(audio_token_id_pairs):
+                audio_16k_normal = read_raw_audio(audio_path, self.speech_featurizer.sample_rate)
+
+                feature = {
+                    "audio_16k_normal": float_feature(audio_16k_normal),
+                    "token_ids": int64_feature(token_ids)
+                }
+
+                example = tf.train.Example(features=tf.train.Features(feature=feature))
+                out.write(example.SerializeToString())
+        print(f"\nCreated {shard_path}")
 
     def create_tfrecords(self):
 
@@ -168,7 +169,7 @@ class ASRTFRecordDatasetKerasTPU(ASRTFRecordDatasetKeras):
 
         splitted_audio_token_id_pairs = np.array_split(audio_token_id_pairs, self.tfrecords_shards)
         with multiprocessing.Pool(self.tfrecords_shards) as pool:
-            pool.map(write_tfrecord_features, zip(shards, splitted_audio_token_id_pairs))
+            pool.map(self.write_tfrecord_features, zip(shards, splitted_audio_token_id_pairs))
 
         return True
 
