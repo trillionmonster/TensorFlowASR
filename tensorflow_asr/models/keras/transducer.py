@@ -51,7 +51,10 @@ class Transducer(BaseTransducer):
     def compile(self, optimizer, global_batch_size, blank=0,
                 loss_weights=None, weighted_metrics=None, run_eagerly=None, **kwargs):
         loss = RnntLoss(blank=blank, global_batch_size=global_batch_size)
-        optimizer_with_scale = mxp.experimental.LossScaleOptimizer(tf.keras.optimizers.get(optimizer), 'dynamic')
+
+        optimizer_with_scale = tf.keras.optimizers.get(optimizer)
+        # optimizer_with_scale = mxp.experimental.LossScaleOptimizer(tf.keras.optimizers.get(optimizer), 'dynamic')
+
         super(Transducer, self).compile(
             optimizer=optimizer_with_scale, loss=loss,
             loss_weights=loss_weights, weighted_metrics=weighted_metrics,

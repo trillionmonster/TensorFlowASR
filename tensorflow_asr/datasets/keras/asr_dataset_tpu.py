@@ -18,7 +18,7 @@ import tensorflow as tf
 import numpy as np
 from tqdm import tqdm
 import json
-from .asr_dataset import ASRDatasetKeras
+from .asr_dataset import ASRTFRecordDatasetKeras
 from ..asr_dataset import AUTOTUNE, TFRECORD_SHARDS
 from ..base_dataset import BUFFER_SIZE
 from ...featurizers.speech_featurizers import SpeechFeaturizer, read_raw_audio
@@ -48,6 +48,7 @@ def get_max_len(cache_path,
     for source_file in source_file_list:
 
         with tf.io.gfile.GFile(source_file, "r") as f:
+            # print(source_file)
             lines = f.read().splitlines()
         lines = lines[1:]
         lines = [line.split("\t", 2) for line in lines]
@@ -94,7 +95,7 @@ def write_tfrecord_features(shard_path, audio_token_id_pairs):
     print(f"\nCreated {shard_path}")
 
 
-class ASRTFRecordDatasetKerasTPU(ASRDatasetKeras):
+class ASRTFRecordDatasetKerasTPU(ASRTFRecordDatasetKeras):
     """ Keras Dataset for ASR using TFRecords """
 
     def __init__(self,
@@ -114,7 +115,8 @@ class ASRTFRecordDatasetKerasTPU(ASRDatasetKeras):
                  buffer_size: int = BUFFER_SIZE):
         super(ASRTFRecordDatasetKerasTPU, self).__init__(
             stage=stage, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-            data_paths=data_paths, augmentations=augmentations, cache=cache, shuffle=shuffle, buffer_size=buffer_size
+            data_paths=data_paths, tfrecords_dir=tfrecords_dir, augmentations=augmentations, cache=cache,
+            shuffle=shuffle, buffer_size=buffer_size
         )
         self.tfrecords_dir = tfrecords_dir
         if tfrecords_shards <= 0: raise ValueError("tfrecords_shards must be positive")
@@ -131,7 +133,7 @@ class ASRTFRecordDatasetKerasTPU(ASRDatasetKeras):
         for audio, _, transcript in tqdm(entries, desc="reading entries"):
             signal = read_raw_audio(audio, self.speech_featurizer.sample_rate)
 
-            label = self.text_featurizer.extract(transcript.decode("utf-8"))
+            label = self.text_featurizer.extract(transcript)
 
             audio_token_id_pairs.append([signal, label])
 

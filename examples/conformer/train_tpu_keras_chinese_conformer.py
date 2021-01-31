@@ -51,7 +51,7 @@ parser.add_argument("--subwords", type=str, default=None, help="Path to file tha
 parser.add_argument("--subwords_corpus", nargs="*", type=str, default=[],
                     help="Transcript files for generating subwords")
 
-parser.add_argument("--bfs", type=int, default=100, help="Buffer size for shuffling")
+parser.add_argument("--bfs", type=int, default=256, help="Buffer size for shuffling")
 
 args = parser.parse_args()
 
@@ -77,8 +77,15 @@ files_list = [
     config.learning_config.dataset_config.eval_paths
 ]
 
-max_input_len, max_label_len, max_prediction_len = \
-    get_max_len(os.path.join(config.learning_config.dataset_config.tfrecords_dir, "max_len.json"), text_featurizer)
+max_input_len, max_label_len, max_prediction_len = get_max_len(
+  os.path.join(config.learning_config.dataset_config.tfrecords_dir, "max_len.json"),
+   text_featurizer,
+   [
+     config.learning_config.dataset_config.train_paths[0],
+     config.learning_config.dataset_config.eval_paths[0],
+     config.learning_config.dataset_config.test_paths[0]
+     ]
+  )
 
 train_dataset = ASRTFRecordDatasetKerasTPU(
     data_paths=config.learning_config.dataset_config.train_paths,
