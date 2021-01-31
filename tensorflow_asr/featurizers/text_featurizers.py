@@ -99,10 +99,10 @@ class CharFeaturizer(TextFeaturizer):
         self.__init_vocabulary()
 
     def __init_vocabulary(self):
-        lines = []
+        lines = [" "]
         if self.decoder_config.vocabulary is not None:
             with codecs.open(self.decoder_config.vocabulary, "r", "utf-8") as fin:
-                lines.extend(fin.readlines())
+                lines.extend(fin.read().splitlines())
         else:
             lines = ENGLISH_CHARACTERS
         self.blank = 0 if self.decoder_config.blank_at_zero else None
