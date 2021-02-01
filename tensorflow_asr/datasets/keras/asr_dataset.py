@@ -19,7 +19,7 @@ import numpy as np
 
 from ..asr_dataset import ASRDataset, AUTOTUNE, TFRECORD_SHARDS, write_tfrecord_file
 from ..base_dataset import BUFFER_SIZE
-from ...featurizers.speech_featurizers import SpeechFeaturizer
+from ...featurizers.speech_featurizers import TFSpeechFeaturizer
 from ...featurizers.text_featurizers import TextFeaturizer
 from ...utils.utils import get_num_batches
 from ...augmentations.augments import Augmentation
@@ -78,7 +78,7 @@ class ASRTFRecordDatasetKeras(ASRDatasetKeras):
     def __init__(self,
                  data_paths: list,
                  tfrecords_dir: str,
-                 speech_featurizer: SpeechFeaturizer,
+                 speech_featurizer: TFSpeechFeaturizer,
                  text_featurizer: TextFeaturizer,
                  stage: str,
                  augmentations: Augmentation = Augmentation(None),

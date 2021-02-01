@@ -72,20 +72,15 @@ speech_featurizer = TFSpeechFeaturizer(config.speech_config)
 
 text_featurizer = CharFeaturizer(config.decoder_config)
 
-files_list = [
-    config.learning_config.dataset_config.train_paths,
-    config.learning_config.dataset_config.eval_paths
-]
-
 max_input_len, max_label_len, max_prediction_len = get_max_len(
-  os.path.join(config.learning_config.dataset_config.tfrecords_dir, "max_len.json"),
-   text_featurizer,
-   [
-     config.learning_config.dataset_config.train_paths[0],
-     config.learning_config.dataset_config.eval_paths[0],
-     config.learning_config.dataset_config.test_paths[0]
-     ]
-  )
+    os.path.join(config.learning_config.dataset_config.tfrecords_dir, "max_len.json"),
+    text_featurizer,
+    [
+        config.learning_config.dataset_config.train_paths[0],
+        config.learning_config.dataset_config.eval_paths[0],
+        config.learning_config.dataset_config.test_paths[0]
+    ]
+)
 
 train_dataset = ASRTFRecordDatasetKerasTPU(
     data_paths=config.learning_config.dataset_config.train_paths,
@@ -126,7 +121,7 @@ with strategy.scope():
     input_shape = speech_featurizer.shape
     input_shape[0] = max_input_len
 
-    conformer._build(input_shape)
+    conformer._build(input_shape, max_prediction_len)
     conformer.summary(line_length=120)
     optimizer = tf.keras.optimizers.Adam(
         TransformerSchedule(

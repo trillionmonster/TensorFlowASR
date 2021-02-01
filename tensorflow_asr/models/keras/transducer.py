@@ -24,10 +24,10 @@ from ...losses.keras.rnnt_losses import RnntLoss
 class Transducer(BaseTransducer):
     """ Keras Transducer Model Warper """
 
-    def _build(self, input_shape):
+    def _build(self, input_shape, predict_len=None):
         features = tf.keras.Input(shape=input_shape, dtype=tf.float32)
         input_length = tf.keras.Input(shape=[], dtype=tf.int32)
-        pred = tf.keras.Input(shape=[None], dtype=tf.int32)
+        pred = tf.keras.Input(shape=[predict_len], dtype=tf.int32)
         pred_length = tf.keras.Input(shape=[], dtype=tf.int32)
         self({
             "input": features,
@@ -51,12 +51,10 @@ class Transducer(BaseTransducer):
     def compile(self, optimizer, global_batch_size, blank=0,
                 loss_weights=None, weighted_metrics=None, run_eagerly=None, **kwargs):
         loss = RnntLoss(blank=blank, global_batch_size=global_batch_size)
-
-        optimizer_with_scale = tf.keras.optimizers.get(optimizer)
-        # optimizer_with_scale = mxp.experimental.LossScaleOptimizer(tf.keras.optimizers.get(optimizer), 'dynamic')
-
+        # optimizer_with_scale = tf.keras.optimizers.get(optimizer)
+        # # optimizer_with_scale = mxp.experimental.LossScaleOptimizer(tf.keras.optimizers.get(optimizer), 'dynamic')
         super(Transducer, self).compile(
-            optimizer=optimizer_with_scale, loss=loss,
+            optimizer=tf.keras.optimizers.get(optimizer), loss=loss,
             loss_weights=loss_weights, weighted_metrics=weighted_metrics,
             run_eagerly=run_eagerly,
             **kwargs
@@ -67,9 +65,9 @@ class Transducer(BaseTransducer):
         with tf.GradientTape() as tape:
             y_pred = self(x, training=True)
             loss = self.loss(y_true, y_pred)
-            scaled_loss = self.optimizer.get_scaled_loss(loss)
-        scaled_gradients = tape.gradient(scaled_loss, self.trainable_weights)
-        gradients = self.optimizer.get_unscaled_gradients(scaled_gradients)
+            # scaled_loss = self.optimizer.get_scaled_loss(loss)
+        # scaled_gradients = tape.gradient(loss, self.trainable_weights)
+        gradients = tape.gradient(loss, self.trainable_weights)
         self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
         return {"train_rnnt_loss": loss}
 

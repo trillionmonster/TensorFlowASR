@@ -21,7 +21,7 @@ import json
 from .asr_dataset import ASRTFRecordDatasetKeras
 from ..asr_dataset import AUTOTUNE, TFRECORD_SHARDS
 from ..base_dataset import BUFFER_SIZE
-from ...featurizers.speech_featurizers import SpeechFeaturizer, read_raw_audio
+from ...featurizers.speech_featurizers import TFSpeechFeaturizer, read_raw_audio
 from ...featurizers.text_featurizers import TextFeaturizer
 from ...utils.utils import get_num_batches, float_feature, int64_feature
 
@@ -82,13 +82,29 @@ def get_max_len(cache_path,
     return max_input_len, max_label_len, max_prediction_len
 
 
+def write_tfrecord_features(args):
+    shard_path, audio_token_id_pairs, sample_rate = args
+    with tf.io.TFRecordWriter(shard_path, options='ZLIB') as out:
+        for audio_path, token_ids in tqdm(audio_token_id_pairs):
+            audio_16k_normal = read_raw_audio(audio_path, sample_rate)
+
+            feature = {
+                "audio_16k_normal": float_feature(audio_16k_normal),
+                "token_ids": int64_feature(token_ids)
+            }
+
+            example = tf.train.Example(features=tf.train.Features(feature=feature))
+            out.write(example.SerializeToString())
+    print(f"\nCreated {shard_path}")
+
+
 class ASRTFRecordDatasetKerasTPU(ASRTFRecordDatasetKeras):
     """ Keras Dataset for ASR using TFRecords """
 
     def __init__(self,
                  data_paths: list,
                  tfrecords_dir: str,
-                 speech_featurizer: SpeechFeaturizer,
+                 speech_featurizer: TFSpeechFeaturizer,
                  text_featurizer: TextFeaturizer,
                  stage: str,
                  max_input_len: int,
@@ -126,20 +142,6 @@ class ASRTFRecordDatasetKerasTPU(ASRTFRecordDatasetKeras):
 
         return audio_token_id_pairs
 
-    def write_tfrecord_features(self, shard_path, audio_token_id_pairs):
-        with tf.io.TFRecordWriter(shard_path, options='ZLIB') as out:
-            for audio_path, token_ids in tqdm(audio_token_id_pairs):
-                audio_16k_normal = read_raw_audio(audio_path, self.speech_featurizer.sample_rate)
-
-                feature = {
-                    "audio_16k_normal": float_feature(audio_16k_normal),
-                    "token_ids": int64_feature(token_ids)
-                }
-
-                example = tf.train.Example(features=tf.train.Features(feature=feature))
-                out.write(example.SerializeToString())
-        print(f"\nCreated {shard_path}")
-
     def create_tfrecords(self):
 
         pattern = self.tfrecords_dir + f"{self.stage}*.tfrecord"
@@ -168,20 +170,15 @@ class ASRTFRecordDatasetKerasTPU(ASRTFRecordDatasetKeras):
         shards = [get_shard_path(idx) for idx in range(1, self.tfrecords_shards + 1)]
 
         splitted_audio_token_id_pairs = np.array_split(audio_token_id_pairs, self.tfrecords_shards)
-        with multiprocessing.Pool(self.tfrecords_shards) as pool:
-            pool.map(self.write_tfrecord_features, zip(shards, splitted_audio_token_id_pairs))
+        sample_rates = np.array([self.speech_featurizer.sample_rate] * self.tfrecords_shards)
+        for args in zip(shards, splitted_audio_token_id_pairs, sample_rates):
+            write_tfrecord_features(args)
+        # with multiprocessing.Pool(self.tfrecords_shards) as pool:
+        #     pool.map(write_tfrecord_features, zip(shards, splitted_audio_token_id_pairs, sample_rates))
 
         return True
 
-    @tf.function
-    def parse(self, record):
-        feature_description = {
-            "audio_16k_normal": tf.io.FixedLenSequenceFeature([], tf.float32),
-            "token_ids": tf.io.FixedLenSequenceFeature([], tf.int64)
-        }
-        example = tf.io.parse_single_example(record, feature_description)
-        audio_16k_normal = example["audio_16k_normal"]
-        token_ids = example["token_ids"]
+    def preprocess(self, audio_16k_normal, token_ids):
 
         signal = self.augmentations.before.augment(audio_16k_normal)
 
@@ -200,6 +197,22 @@ class ASRTFRecordDatasetKerasTPU(ASRTFRecordDatasetKeras):
         label_length = tf.cast(tf.shape(token_ids)[0], tf.int32)
 
         token_ids = tf.convert_to_tensor(token_ids, tf.int32)
+        return features, input_length, token_ids, label_length, prediction, prediction_length
+
+    @tf.function
+    def parse(self, record):
+        feature_description = {
+            "audio_16k_normal": tf.io.FixedLenSequenceFeature([], tf.float32, allow_missing=True),
+            "token_ids": tf.io.FixedLenSequenceFeature([], tf.int64, allow_missing=True)
+        }
+        example = tf.io.parse_single_example(record, feature_description)
+        features, input_length, token_ids, label_length, \
+        prediction, prediction_length = tf.numpy_function(
+            self.preprocess,
+            inp=[example["audio_16k_normal"], example["token_ids"]],
+            Tout=[tf.float32, tf.int32, tf.int32, tf.int32, tf.int32, tf.int32]
+        )
+
         return (
             {
                 "input": features,
@@ -215,12 +228,6 @@ class ASRTFRecordDatasetKerasTPU(ASRTFRecordDatasetKeras):
 
     def process(self, dataset, batch_size):
         dataset = dataset.map(self.parse, num_parallel_calls=AUTOTUNE)
-
-        if self.cache:
-            dataset = dataset.cache()
-
-        if self.shuffle:
-            dataset = dataset.shuffle(self.buffer_size, reshuffle_each_iteration=True)
 
         # PADDED BATCH the dataset
         input_shape = self.speech_featurizer.shape
@@ -254,6 +261,11 @@ class ASRTFRecordDatasetKerasTPU(ASRTFRecordDatasetKeras):
             ),
             drop_remainder=True
         )
+        if self.cache:
+            dataset = dataset.cache()
+
+        if self.shuffle:
+            dataset = dataset.shuffle(self.buffer_size, reshuffle_each_iteration=True)
 
         # PREFETCH to improve speed of input length
         dataset = dataset.prefetch(AUTOTUNE)
